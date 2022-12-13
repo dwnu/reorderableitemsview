@@ -3,7 +3,6 @@ library reorderableitemsview;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
@@ -28,21 +27,17 @@ class ReorderableItemsView extends StatefulWidget {
     this.header,
     required this.children,
     required this.onReorder,
+    this.feedBackWidgetBuilder,
     this.scrollController,
     this.scrollDirection = Axis.vertical,
     this.padding,
-    this.staggeredTiles,
     this.crossAxisCount = 3,
     this.isGrid = false,
     this.reverse = false,
     this.longPressToDrag = true,
     this.mainAxisSpacing = 0.0,
     this.crossAxisSpacing = 0.0,
-    this.feedBackWidgetBuilder,
-  })  : assert(scrollDirection != null),
-        assert(onReorder != null),
-        assert(children != null),
-        assert(
+  })  : assert(
           children.every((Widget w) => w.key != null),
           'All children of this widget must have a key.',
         ),
@@ -93,9 +88,6 @@ class ReorderableItemsView extends StatefulWidget {
   /// This [ReorderableItemsView] calls [onReorder] after a list child is dropped
   /// into a new position.
   final ReorderCallback onReorder;
-
-  /// Used when we are building a GridView
-  final List<StaggeredTile>? staggeredTiles;
 
   /// Used when we are building a GridView
   final int crossAxisCount;
@@ -149,7 +141,6 @@ class _ReorderableItemsViewState extends State<ReorderableItemsView> {
           onReorder: widget.onReorder,
           padding: widget.padding,
           reverse: widget.reverse,
-          staggeredTiles: widget.staggeredTiles,
           crossAxisCount: widget.crossAxisCount,
           isGrid: widget.isGrid,
           longPressToDrag: widget.longPressToDrag,
@@ -180,7 +171,6 @@ class _ReorderableListContent extends StatefulWidget {
     required this.padding,
     required this.onReorder,
     required this.reverse,
-    required this.staggeredTiles,
     required this.crossAxisCount,
     required this.isGrid,
     required this.longPressToDrag,
@@ -196,7 +186,6 @@ class _ReorderableListContent extends StatefulWidget {
   final EdgeInsets? padding;
   final ReorderCallback onReorder;
   final bool reverse;
-  final List<StaggeredTile>? staggeredTiles;
   final int crossAxisCount;
   final bool isGrid;
   final bool longPressToDrag;
@@ -319,9 +308,7 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
   // Requests animation to the latest next index if it changes during an animation.
   void _onEntranceStatusChanged(AnimationStatus status) {
     if (status == AnimationStatus.completed) {
-      setState(() {
-        _requestAnimationToNextIndex();
-      });
+      setState(() => _requestAnimationToNextIndex());
     }
   }
 
@@ -331,7 +318,6 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
     final RenderObject contextObject = context.findRenderObject()!;
     final RenderAbstractViewport viewport =
         RenderAbstractViewport.of(contextObject)!;
-    assert(viewport != null);
     // If and only if the current scroll offset falls in-between the offsets
     // necessary to reveal the selected context at the top or bottom of the
     // screen, then it is already on-screen.
@@ -368,17 +354,13 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
   // Wraps children in Row or Column, so that the children flow in
   // the widget's scrollDirection.
   Widget _buildContainerForScrollDirection({List<Widget?>? children}) {
-    if (widget.isGrid) {
-      assert(widget.staggeredTiles != null);
-    }
-
     if (widget.isGrid)
-      return StaggeredGridView.count(
-        shrinkWrap: true,
-        primary: false,
-        physics: NeverScrollableScrollPhysics(),
+      return StaggeredGrid.count(
+        // shrinkWrap: true,
+        // primary: false,
+        // physics: NeverScrollableScrollPhysics(),
         crossAxisCount: widget.crossAxisCount,
-        staggeredTiles: widget.staggeredTiles!,
+        // staggeredTiles: widget.staggeredTiles!,
         children: children as List<Widget>,
         mainAxisSpacing: widget.mainAxisSpacing,
         crossAxisSpacing: widget.crossAxisSpacing,
@@ -409,7 +391,7 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
         _ghostIndex = index;
         _currentIndex = index;
         _entranceController.value = 1.0;
-        _draggingFeedbackSize = keyIndexGlobalKey.currentContext!.size;
+        _draggingFeedbackSize = keyIndexGlobalKey.currentContext?.size;
       });
     }
 
@@ -442,8 +424,7 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
       // before index+2, which is after the space at index+1.
       void moveAfter() => reorder(index, index + 2);
 
-      final MaterialLocalizations localizations =
-          MaterialLocalizations.of(context);
+      final localizations = MaterialLocalizations.of(context);
 
       // If the item can move to before its current position in the list.
       if (index > 0) {
@@ -474,6 +455,10 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
             moveToEnd;
       }
 
+      if (toWrap is StaggeredGridTile) {
+        return toWrap.child;
+      }
+
       // We pass toWrap with a GlobalKey into the Draggable so that when a list
       // item gets dragged, the accessibility framework can preserve the selected
       // state of the dragging item.
@@ -495,31 +480,33 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
         List<dynamic> rejectedCandidates) {
       final Widget toWrapWithSemantics = wrapWithSemantics();
 
-      double mainAxisExtent = 0.0;
       double crossAxisExtent = 0.0;
-
       BoxConstraints newConstraints = constraints;
 
       if (widget.isGrid &&
           _dragging == null &&
-          index < widget.staggeredTiles!.length) {
-        final StaggeredTile tile = widget.staggeredTiles![index];
+          index < widget.children.length) {
+        final tile = widget.children[index];
 
-        final double usableCrossAxisExtent = constraints.biggest.width;
-        final double cellExtent = usableCrossAxisExtent / widget.crossAxisCount;
+        if (tile is StaggeredGridTile) {
+          final double usableCrossAxisExtent = constraints.biggest.width;
+          final double cellExtent =
+              usableCrossAxisExtent / widget.crossAxisCount;
 
-        mainAxisExtent = tile.mainAxisExtent ??
-            (tile.mainAxisCellCount! * cellExtent) +
-                (tile.mainAxisCellCount! - 1);
+          // mainAxisExtent = tile.mainAxisExtent ??
+          //     (tile.mainAxisCellCount! * cellExtent) +
+          //         (tile.mainAxisCellCount! - 1);
 
-        crossAxisExtent = cellExtent * tile.crossAxisCellCount;
+          crossAxisExtent = min(cellExtent * tile.crossAxisCellCount,
+              MediaQuery.of(context).size.width / 3);
 
-        newConstraints = constraints.copyWith(
-          minWidth: crossAxisExtent,
-          maxWidth: crossAxisExtent,
-          minHeight: mainAxisExtent,
-          maxHeight: mainAxisExtent,
-        );
+          newConstraints = constraints.copyWith(
+            minWidth: crossAxisExtent,
+            maxWidth: crossAxisExtent,
+            // minHeight: mainAxisExtent,
+            // maxHeight: mainAxisExtent,
+          );
+        }
       } else {
         newConstraints = constraints.copyWith(
           minWidth: 0.0,
@@ -537,10 +524,8 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
               axis: null,
               data: toWrap.key,
               ignoringFeedbackSemantics: false,
-              feedback: widget.feedBackWidgetBuilder != null
-                  ? widget.feedBackWidgetBuilder!(
-                      context, index, toWrapWithSemantics)
-                  : Container(
+              feedback: widget.feedBackWidgetBuilder == null
+                  ? Container(
                       alignment: Alignment.topLeft,
                       // These constraints will limit the cross axis of the drawn widget.
                       constraints: newConstraints,
@@ -548,12 +533,14 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
                         elevation: 6.0,
                         child: toWrapWithSemantics,
                       ),
-                    ),
+                    )
+                  : widget.feedBackWidgetBuilder!(
+                      context, index, toWrapWithSemantics),
               child: _dragging == toWrap.key
                   ? const SizedBox()
                   : toWrapWithSemantics,
               childWhenDragging: const SizedBox(),
-              dragAnchor: DragAnchor.child,
+              dragAnchorStrategy: childDragAnchorStrategy,
               onDragStarted: onDragStarted,
               // When the drag ends inside a DragTarget widget, the drag
               // succeeds, and we reorder the widget into position appropriately.
@@ -570,10 +557,8 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
               axis: null,
               data: toWrap.key,
               ignoringFeedbackSemantics: false,
-              feedback: widget.feedBackWidgetBuilder != null
-                  ? widget.feedBackWidgetBuilder!(
-                      context, index, toWrapWithSemantics)
-                  : Container(
+              feedback: widget.feedBackWidgetBuilder == null
+                  ? Container(
                       alignment: Alignment.topLeft,
                       // These constraints will limit the cross axis of the drawn widget.
                       constraints: newConstraints,
@@ -581,12 +566,14 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
                         elevation: 6.0,
                         child: toWrapWithSemantics,
                       ),
-                    ),
+                    )
+                  : widget.feedBackWidgetBuilder!(
+                      context, index, toWrapWithSemantics),
               child: _dragging == toWrap.key
                   ? const SizedBox()
                   : toWrapWithSemantics,
               childWhenDragging: const SizedBox(),
-              dragAnchor: DragAnchor.child,
+              dragAnchorStrategy: childDragAnchorStrategy,
               onDragStarted: onDragStarted,
               // When the drag ends inside a DragTarget widget, the drag
               // succeeds, and we reorder the widget into position appropriately.
@@ -652,7 +639,7 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
     }
 
     // We wrap the drag target in a Builder so that we can scroll to its specific context.
-    return Builder(builder: (BuildContext context) {
+    final builder = Builder(builder: (BuildContext context) {
       return DragTarget<Key>(
         builder: buildDragTarget,
         onWillAccept: (Key? toAccept) {
@@ -668,6 +655,7 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
         onLeave: (Object? leaving) {},
       );
     });
+    return _Wrapper(builder: builder, toWrap: toWrap);
   }
 
   @override
@@ -716,8 +704,29 @@ class _ReorderableListContentState extends State<_ReorderableListContent>
   }
 }
 
-class StaggeredTileExtended extends StaggeredTile {
-    StaggeredTileExtended.count(
-      int crossAxisCellCount, num mainAxisCellCount)
-      : super.count(crossAxisCellCount, mainAxisCellCount.toDouble());
+class _Wrapper extends StatelessWidget {
+  const _Wrapper({
+    required this.builder,
+    required this.toWrap,
+    Key? key,
+  }) : super(key: key);
+
+  final Widget builder;
+  final Widget toWrap;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = toWrap;
+    if (child is StaggeredGridTile) {
+      // We only support [StaggeredGridTile.fit] constructor for now.
+      assert(child.mainAxisCellCount == null && child.mainAxisExtent == null);
+      return StaggeredGridTile.fit(
+        key: child.key,
+        crossAxisCellCount: child.crossAxisCellCount,
+        child: builder,
+      );
+    }
+
+    return builder;
+  }
 }
